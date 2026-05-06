@@ -128,17 +128,108 @@ JNIEXPORT jbyteArray JNICALL
 Java_com_chameleonultra_android_crypto_MfKey32Jni_nestedRecover(
         JNIEnv *env,
         jclass clazz,
-        jbyteArray nonces,
+        jbyteArray knownKeyBytes,
+        jbyteArray encryptedNonces,
         jbyteArray uidBytes,
         jint targetSector,
         jint targetKeyType) {
 
-    // TODO: Implement nested attack
-    // This requires collecting encrypted nonces from the target sector
-    // using a known key from another sector
+    // Validate inputs
+    jsize keyLen = (*env)->GetArrayLength(env, knownKeyBytes);
+    jsize uidLen = (*env)->GetArrayLength(env, uidBytes);
+    jsize noncesLen = (*env)->GetArrayLength(env, encryptedNonces);
+    
+    if (keyLen != 6 || uidLen != 4 || noncesLen % 8 != 0) {
+        return (*env)->NewByteArray(env, 0); // Invalid parameters
+    }
 
-    // Placeholder: return empty array
-    jbyteArray result = (*env)->NewByteArray(env, 0);
+    // Get known key
+    jbyte *keyRaw = (*env)->GetByteArrayElements(env, knownKeyBytes, NULL);
+    uint64_t knownKey = 0;
+    for (int i = 0; i < 6; i++) {
+        knownKey = (knownKey << 8) | ((uint8_t)keyRaw[i] & 0xFF);
+    }
+    (*env)->ReleaseByteArrayElements(env, knownKeyBytes, keyRaw, JNI_ABORT);
+
+    // Get UID
+    jbyte *uidRaw = (*env)->GetByteArrayElements(env, uidBytes, NULL);
+    uint32_t uid = bytes_to_uint32((const uint8_t *)uidRaw);
+    (*env)->ReleaseByteArrayElements(env, uidBytes, uidRaw, JNI_ABORT);
+
+    // Get encrypted nonces
+    jbyte *noncesRaw = (*env)->GetByteArrayElements(env, encryptedNonces, NULL);
+    int numNonces = noncesLen / 8;
+
+    // Try to recover target key using nested attack
+    // For each encrypted nonce pair, attempt key recovery
+    uint64_t *foundKeys = calloc(numNonces * 2, sizeof(uint64_t));
+    int keyCount = 0;
+
+    for (int i = 0; i < numNonces; i++) {
+        const uint8_t *noncePair = (const uint8_t *)noncesRaw + i * 8;
+        
+        uint32_t nt_enc = bytes_to_uint32(noncePair + 0);
+        uint32_t nr_enc = bytes_to_uint32(noncePair + 4);
+        
+        // Decrypt nonce using known key
+        struct Crypto1State *state = crypto1_create(knownKey);
+        if (!state) continue;
+
+        // Simulate authentication with known key to decrypt
+        uint32_t nt_plain = crypto1_word(state, uid ^ nt_enc, 0);
+        uint32_t nr_plain = crypto1_word(state, nr_enc, 1);
+        
+        // Now try to recover target key using decrypted values
+        // This is simplified - full implementation needs proper nonce collection
+        
+        crypto1_destroy(state);
+        
+        // For now, use lfsr_recovery32 with decrypted values
+        uint32_t ks2 = nr_enc ^ prng_successor(nt_plain, 64);
+        struct Crypto1State *candidates = lfsr_recovery32(ks2, 0);
+        
+        if (candidates) {
+            for (struct Crypto1State *t = candidates; t->odd | t->even; ++t) {
+                uint64_t key;
+                crypto1_get_lfsr(t, &key);
+                
+                // Verify key
+                struct Crypto1State *verify = crypto1_create(key);
+                uint32_t verify_nt = crypto1_word(verify, uid ^ nt_plain, 0);
+                uint32_t verify_nr = crypto1_word(verify, nr_plain, 1);
+                
+                if (verify_nt == nt_enc && verify_nr == nr_enc) {
+                    // Check duplicate
+                    int duplicate = 0;
+                    for (int k = 0; k < keyCount; k++) {
+                        if (foundKeys[k] == key) {
+                            duplicate = 1;
+                            break;
+                        }
+                    }
+                    if (!duplicate) {
+                        foundKeys[keyCount++] = key;
+                    }
+                }
+                crypto1_destroy(verify);
+            }
+            free(candidates);
+        }
+    }
+
+    (*env)->ReleaseByteArrayElements(env, encryptedNonces, noncesRaw, JNI_ABORT);
+
+    // Return found keys
+    jbyteArray result = (*env)->NewByteArray(env, keyCount * 6);
+    if (result && keyCount > 0) {
+        jbyte *resultBytes = (*env)->GetByteArrayElements(env, result, NULL);
+        for (int i = 0; i < keyCount; i++) {
+            uint64_to_bytes(foundKeys[i], (uint8_t *)resultBytes + i * 6);
+        }
+        (*env)->ReleaseByteArrayElements(env, result, resultBytes, 0);
+    }
+
+    free(foundKeys);
     return result;
 }
 

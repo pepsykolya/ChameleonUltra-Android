@@ -26,7 +26,8 @@ object MfKey32Jni {
     /**
      * Recover key using nested attack.
      *
-     * @param nonces Encrypted nonces collected from target sector
+     * @param knownKey 6-byte known key for source sector
+     * @param encryptedNonces Encrypted nonces collected from target sector (8 bytes each: nt_enc + nr_enc)
      * @param uid 4-byte card UID
      * @param targetSector Target sector number (0-15 for 1K)
      * @param targetKeyType 0=KeyA, 1=KeyB
@@ -34,7 +35,8 @@ object MfKey32Jni {
      */
     @JvmStatic
     external fun nestedRecover(
-        nonces: ByteArray,
+        knownKey: ByteArray,
+        encryptedNonces: ByteArray,
         uid: ByteArray,
         targetSector: Int,
         targetKeyType: Int
