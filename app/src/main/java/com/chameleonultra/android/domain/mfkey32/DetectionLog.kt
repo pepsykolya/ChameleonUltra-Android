@@ -95,6 +95,30 @@ data class DetectionLog(
      */
     fun arHex(): String = ar.toHex(8)
 
+    /**
+     * Convert to 18-byte array for JNI.
+     * Format: [nt0:4 BE][nr0_enc:4 BE][ar0_enc:4 BE][nt1:4 BE][nr1_enc:2 BE]
+     */
+    fun toBytes(): ByteArray {
+        val bytes = ByteArray(18)
+        nt.toBytesBE(bytes, 0)
+        nr.toBytesBE(bytes, 4)
+        ar.toBytesBE(bytes, 8)
+        // For mfkey32v2 we need two auth attempts - duplicate for now
+        nt.toBytesBE(bytes, 12)
+        // nr1_enc: 2 bytes (upper 16 bits of nr)
+        bytes[16] = ((nr shr 8) and 0xFF).toByte()
+        bytes[17] = (nr and 0xFF).toByte()
+        return bytes
+    }
+
+    private fun Int.toBytesBE(bytes: ByteArray, offset: Int) {
+        bytes[offset] = ((this shr 24) and 0xFF).toByte()
+        bytes[offset + 1] = ((this shr 16) and 0xFF).toByte()
+        bytes[offset + 2] = ((this shr 8) and 0xFF).toByte()
+        bytes[offset + 3] = (this and 0xFF).toByte()
+    }
+
     private fun Int.toHex(digits: Int): String {
         return "0x${toString(16).uppercase().padStart(digits, '0')}"
     }

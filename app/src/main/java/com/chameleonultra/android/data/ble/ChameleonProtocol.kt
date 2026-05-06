@@ -1,5 +1,7 @@
 package com.chameleonultra.android.data.ble
 
+import com.chameleonultra.android.domain.model.ChameleonFrame
+
 object ChameleonProtocol {
     const val SOF: Byte = 0x11
     const val EOF: Byte = 0x11
@@ -63,19 +65,4 @@ object ChameleonProtocol {
     }
 
     fun bytesToHex(bytes: ByteArray): String = bytes.joinToString(" ") { "%02X".format(it) }
-}
-
-data class ChameleonFrame(
-    val cmd: Int,
-    val status: Int,
-    val data: ByteArray
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-        other as ChameleonFrame
-        return cmd == other.cmd && status == other.status && data.contentEquals(other.data)
-    }
-
-    override fun hashCode(): Int = 31 * (31 * cmd + status) + data.contentHashCode()
 }

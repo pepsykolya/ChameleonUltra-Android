@@ -12,24 +12,39 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Nfc
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.chameleonultra.android.data.ble.ChameleonCommands
+import com.chameleonultra.android.domain.model.ChameleonCommands
 import com.chameleonultra.android.domain.model.BleDevice
 import com.chameleonultra.android.domain.model.ConnectionState
 import com.chameleonultra.android.domain.model.LogEntry
+import com.chameleonultra.android.ui.screens.CardEmulateScreen
+import com.chameleonultra.android.ui.screens.CardReadScreen
+import com.chameleonultra.android.ui.screens.KeyRecoveryScreen
 import com.chameleonultra.android.ui.theme.ChameleonUltraTheme
 
 @Composable
@@ -39,11 +54,59 @@ fun MainScreen(
     val connectionState by viewModel.connectionState.collectAsState()
     val devices by viewModel.discoveredDevices.collectAsState()
     val logs by viewModel.logs.collectAsState()
+    var selectedTab by remember { mutableIntStateOf(0) }
 
+    val tabs = listOf(
+        "Device" to Icons.Default.Home,
+        "Read" to Icons.Default.Nfc,
+        "Emulate" to Icons.Default.Settings,
+        "Keys" to Icons.Default.Keyboard
+    )
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                tabs.forEachIndexed { index, (label, icon) ->
+                    NavigationBarItem(
+                        icon = { Icon(icon, contentDescription = label) },
+                        label = { Text(label) },
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index }
+                    )
+                }
+            }
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+        ) {
+            when (selectedTab) {
+                0 -> DeviceTab(
+                    connectionState = connectionState,
+                    devices = devices,
+                    logs = logs,
+                    viewModel = viewModel
+                )
+                1 -> CardReadScreen(viewModel)
+                2 -> CardEmulateScreen(viewModel)
+                3 -> KeyRecoveryScreen(viewModel)
+            }
+        }
+    }
+}
+
+@Composable
+fun DeviceTab(
+    connectionState: ConnectionState,
+    devices: List<BleDevice>,
+    logs: List<LogEntry>,
+    viewModel: MainViewModel
+) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
         StatusSection(connectionState)
 
@@ -54,13 +117,6 @@ fun MainScreen(
             onScan = viewModel::startScan,
             onStopScan = viewModel::stopScan,
             onDisconnect = viewModel::disconnect
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        CommandSection(
-            viewModel = viewModel,
-            enabled = connectionState is ConnectionState.Connected
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -76,6 +132,7 @@ fun MainScreen(
         LogsSection(logs = logs)
     }
 }
+
 
 @Composable
 fun StatusSection(connectionState: ConnectionState) {
